@@ -24,7 +24,8 @@ Para desplegar el proyecto con Serverless:
 npm install -g serverless
 pip install -r requirements.txt
 2️⃣ Configura credenciales AWS:
-aws configure
+cd .aws/
+pico credentials
 3️⃣ Despliega:
 serverless deploy
 ```
