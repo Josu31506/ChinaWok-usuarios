@@ -1,99 +1,97 @@
-import json
 import boto3
 import os
+import json
 
 AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
 TABLE_USUARIOS_NAME = os.getenv("TABLE_USUARIOS", "ChinaWok-Usuarios")
+TOKEN_FUNCTION_NAME = os.getenv("TOKEN_FUNCTION_NAME", "Validar_Token_Acceso_ChinaWok")
 
 dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
 usuarios_table = dynamodb.Table(TABLE_USUARIOS_NAME)
+lambda_client = boto3.client("lambda", region_name=AWS_REGION)
+
+
+def _parse_body(event):
+    body = event.get("body", {})
+    if isinstance(body, str):
+        body = json.loads(body) if body.strip() else {}
+    elif not isinstance(body, dict):
+        body = {}
+    return body
+
+
+def _get_token(event, body):
+    headers = event.get("headers", {}) or {}
+    token = headers.get("Authorization") or headers.get("authorization") or body.get("token")
+    if not token:
+        return None
+    if isinstance(token, str) and token.lower().startswith("bearer "):
+        token = token.split(" ", 1)[1].strip()
+    return token
+
+
+def _validar_token(token):
+    payload = {"token": token}
+    invoke_response = lambda_client.invoke(
+        FunctionName=TOKEN_FUNCTION_NAME,
+        InvocationType="RequestResponse",
+        Payload=json.dumps(payload).encode("utf-8")
+    )
+    return json.loads(invoke_response["Payload"].read())
 
 
 def lambda_handler(event, context):
+    body = _parse_body(event)
+    token = _get_token(event, body)
 
-    body = {}
+    if not token:
+        return {"statusCode": 401, "body": {"message": "Falta token"}}
 
-    if isinstance(event, dict) and "body" in event:
-        raw_body = event.get("body")
-        if isinstance(raw_body, str):
-            body = json.loads(raw_body) if raw_body else {}
-        elif isinstance(raw_body, dict):
-            body = raw_body
-        else:
-            body = {}
-    elif isinstance(event, dict):
-        body = event
-    elif isinstance(event, str):
-        body = json.loads(event)
-    else:
-        body = {}
+    resp_val = _validar_token(token)
+    if resp_val.get("statusCode") == 403:
+        return {"statusCode": 403, "body": {"message": "Forbidden - Acceso No Autorizado"}}
 
     correo = body.get("correo")
-
     if not correo:
         path_params = event.get("pathParameters") or {}
         correo = path_params.get("correo")
 
     if not correo:
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"message": "correo es obligatorio"})
-        }
+        return {"statusCode": 400, "body": {"message": "correo es obligatorio"}}
 
+    new_info_bancaria = body.get("informacion_bancaria")
     new_nombre = body.get("nombre")
     new_contrasena = body.get("contrasena")
-    new_role = body.get("role")
-    new_info_bancaria = body.get("informacion_bancaria")
 
     update_parts = []
     expr_values = {}
-    expr_names = {}  
 
+    if new_info_bancaria:
+        update_parts.append("informacion_bancaria = :info")
+        expr_values[":info"] = new_info_bancaria
     if new_nombre:
         update_parts.append("nombre = :nombre")
         expr_values[":nombre"] = new_nombre
-
     if new_contrasena:
         update_parts.append("contrasena = :contrasena")
         expr_values[":contrasena"] = new_contrasena
 
-    if new_role:
- 
-        update_parts.append("#role_attr = :role")
-        expr_values[":role"] = new_role
-        expr_names["#role_attr"] = "role"
-
-    if new_info_bancaria is not None:
-        update_parts.append("informacion_bancaria = :info")
-        expr_values[":info"] = new_info_bancaria
-
     if not update_parts:
-        return {
-            "statusCode": 400,
-            "body": json.dumps({"message": "No hay campos a actualizar"})
-        }
+        return {"statusCode": 400, "body": {"message": "No hay campos a actualizar"}}
 
     update_expr = "SET " + ", ".join(update_parts)
 
-    params = {
-        "Key": {"correo": correo},
-        "UpdateExpression": update_expr,
-        "ExpressionAttributeValues": expr_values,
-        "ReturnValues": "ALL_NEW"
-    }
+    resp = usuarios_table.update_item(
+        Key={"correo": correo},
+        UpdateExpression=update_expr,
+        ExpressionAttributeValues=expr_values,
+        ReturnValues="ALL_NEW"
+    )
 
-    if expr_names:
-        params["ExpressionAttributeNames"] = expr_names
-
-    resp = usuarios_table.update_item(**params)
-
-    updated = resp.get("Attributes", {})
-    updated.pop("contrasena", None)  
+    user = resp.get("Attributes", {})
+    user.pop("contrasena", None)
 
     return {
         "statusCode": 200,
-        "body": json.dumps({
-            "message": "Usuario actualizado",
-            "user": updated
-        })
+        "body": user
     }
