@@ -1,0 +1,68 @@
+# 🧩 --- GITIGNORE PARA PROYECTO AWS LAMBDA PYTHON / SERVERLESS ---
+
+# Archivos y carpetas de entorno
+.env
+*.env
+.env.*
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+
+# Directorios de dependencias
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+*.egg-info/
+dist/
+build/
+package-lock.json
+
+# Configuración local de Serverless / AWS
+.aws/
+.serverless/
+.aws-sam/
+.sls-next/
+.sls-cache/
+.sls-*
+*.zip
+
+# Archivos de credenciales o secretos
+aws_credentials.json
+credentials.json
+config.json
+secrets.json
+*.pem
+*.key
+
+# Archivos de logs y temporales
+*.log
+*.bak
+*.tmp
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Archivos de IDEs
+.vscode/
+.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# Archivos de Postman o pruebas locales
+*.postman_collection.json
+*.postman_environment.json
+
+# Otros
+*.tar.gz
+*.tgz
+*.zip
+*.old
+*.orig
+*.retry
